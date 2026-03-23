@@ -53,30 +53,14 @@ sequenceDiagram
 
 1. **Story Input & Continuation**
 
-![屏幕截图 2026-03-16 213617](D:\Users\24522\Pictures\Screenshots\屏幕截图 2026-03-16 213617.png)
-
-![屏幕截图 2026-03-16 214033](D:\Users\24522\Pictures\Screenshots\屏幕截图 2026-03-16 214033.png)
-
-
 
 2.**Consistency Check Test**
 
-![屏幕截图 2026-03-16 214226](D:\Users\24522\Pictures\Screenshots\屏幕截图 2026-03-16 214226.png)
-
-![屏幕截图 2026-03-16 214241](D:\Users\24522\Pictures\Screenshots\屏幕截图 2026-03-16 214241.png)
 
 3.**Structural Analysis Test**
 
-![屏幕截图 2026-03-16 214317](D:\Users\24522\Pictures\Screenshots\屏幕截图 2026-03-16 214317.png)
-
-![屏幕截图 2026-03-16 214327](D:\Users\24522\Pictures\Screenshots\屏幕截图 2026-03-16 214327.png)
 
 4.**Minimal Input Generation (Opening + Short Prompt)**
-
-![屏幕截图 2026-03-16 214625](D:\Users\24522\Pictures\Screenshots\屏幕截图 2026-03-16 214625.png)
-
-![屏幕截图 2026-03-16 214645](D:\Users\24522\Pictures\Screenshots\屏幕截图 2026-03-16 214645.png)
-
 
 
 ## References
