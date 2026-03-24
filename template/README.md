@@ -6,13 +6,13 @@ Intelligent Text Analysis and Reporting Assistant Based on LLM
 
 ## Project Overview <!-- required -->
 
-This project is an intelligent assistant system designed for data processing and text mining. Relying on a locally deployed LLM cluster, it aims to perform deep structural extraction and multi-dimensional analysis on massive unstructured Chinese and English texts (e.g., course materials, academic papers, and assignments). Core features include intelligent summarization, sentiment analysis, and key feature extraction. Advanced features support batch processing pipelines and multi-document comparative analysis.
+This project is an intelligent assistant system designed for data processing and text mining. Relying on a locally deployed LLM cluster, it aims to perform deep structural extraction and multi-dimensional analysis on massive unstructured Chinese and English texts (e.g. course materials, academic papers, and assignments). Core features include intelligent summarization, sentiment analysis, and key feature extraction. Advanced features support batch processing pipelines and multi-document comparative analysis.
 
 ## Activity Information <!-- required -->
 
 - **Competition / Workshop:** 2026 NJUPT Winter Battle <!-- required: replace with your activity name -->
 - **Team Members:** Fengyi Li, Hongqing Du <!-- required: list all team members -->
-- **Awarded:** Gold / Silver / Bronze / N/A <!-- required: use N/A if not yet announced -->
+- **Awarded:** Bronze 
 
 ## Environment <!-- required -->
 
