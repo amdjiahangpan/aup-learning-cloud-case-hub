@@ -2,11 +2,10 @@
 
 <div align="center">
 
-[![AMD](https://img.shields.io/badge/AMD-ED1C24?style=flat-square&logo=amd&logoColor=white)](https://www.amd.com)
-[![ROCm](https://img.shields.io/badge/ROCm-FF6B35?style=flat-square&logo=amd&logoColor=white)](https://rocm.docs.amd.com)
-[![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org)
-[![Jupyter](https://img.shields.io/badge/Jupyter-F37626?style=flat-square&logo=jupyter&logoColor=white)](https://jupyter.org)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](./CONTRIBUTING.md)
+[![AMD](https://img.shields.io/badge/AMD-ROCm-ED1C24)](https://rocm.docs.amd.com/)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB)](https://www.python.org)
+[![Jupyter](https://img.shields.io/badge/Jupyter-Notebook-F37626)](https://jupyter.org)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](./CONTRIBUTING.md)
 
 </div>
 
