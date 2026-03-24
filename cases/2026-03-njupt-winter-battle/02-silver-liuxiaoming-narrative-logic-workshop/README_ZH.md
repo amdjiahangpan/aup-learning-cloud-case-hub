@@ -50,7 +50,7 @@
 
   ## 结果 / 演示
 
-  ![N1BGsyde_converted](.\image\N1BGsyde_converted.gif)
+  ![](image/N1BGsyde_converted.gif)
 
   1.输入故事并续写
   ![](./image/213617.png)
