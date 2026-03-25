@@ -1,4 +1,4 @@
-# aup-learning-cloud-case-hub
+# student-gallery
 
 <div align="center">
 
@@ -21,7 +21,7 @@
 
 1. 打开你的 **aup-learning-cloud** 实例
 2. 选择 **Basic GPU Environment**
-3. 填入 Git URL：`https://github.com/amdjiahangpan/aup-learning-cloud-case-hub`
+3. 填入 Git URL：`https://github.com/amdjiahangpan/student-gallery`
 4. 点击 **Start** —— 仓库将自动克隆到你的 home 目录
 5. 进入 `cases/`，打开任意 `main.ipynb` 运行
 
@@ -41,7 +41,7 @@ cases/
 
 | 活动 | 时间 | 参赛作品数 | 获奖情况 |
 |------|------|-----------|---------|
-| [南邮寒假大作战](./cases/2026-03-njupt-winter-battle/) | 2026-03 | — | — |
+| [南邮寒假大作战](./cases/2026-03-njupt-winter-camp/) | 2026-03 | — | — |
 
 ## 参与贡献
 
@@ -56,7 +56,7 @@ cases/
 ## 贡献者
 
 <div align="center">
-  <a href="https://github.com/amdjiahangpan/aup-learning-cloud-case-hub/graphs/contributors">
-    <img src="https://contrib.rocks/image?repo=amdjiahangpan/aup-learning-cloud-case-hub" />
+  <a href="https://github.com/amdjiahangpan/student-gallery/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=amdjiahangpan/student-gallery" />
   </a>
 </div>
