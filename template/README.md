@@ -31,8 +31,11 @@ This project is an intelligent assistant system designed for data processing and
 
 ## Technical Highlights
 
-* **Prompt Engineering:** Utilized System Roles, Few-shot prompting, and Chain-of-Thought (CoT) to ensure stable formatting and complex logical deduction.
-***Context Window Management:** Implemented cascaded summary generation and an adaptive allocation algorithm to prevent Out-Of-Memory (OOM) errors with long texts.
+* **Prompt Engineering:** Utilized System Roles, Few-shot prompting, and Chain-of-Thought (CoT) to ensure stable formatting and complex logical deduction
+![result](./assets/few_shot.jpg)
+![result](./assets/CoT.png)
+***Context Window Management:** Implemented cascaded summary generation and an adaptive allocation algorithm to prevent Out-Of-Memory (OOM) errors with long texts
+![result](./assets/single.png)
 * **API Lifecycle Management:** Designed robust error handling with a linear backoff retry strategy to mitigate server rate limits and avoid "retry storms".
 * **Robust Data Parsing:** Normalized polymorphic data streams and added a pre-execution circuit breaker to isolate corrupted files without crashing the pipeline.
 * **Asynchronous Concurrency:** Used `ThreadPoolExecutor` to parallelize subtasks, masking network I/O latency and significantly boosting throughput.
