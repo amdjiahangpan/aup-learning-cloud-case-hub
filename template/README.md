@@ -1,6 +1,6 @@
-# Project Title <!-- required -->
+# Intelligent Text Analysis and Reporting Assistant Based on LLM <!-- required -->
 
-Intelligent Text Analysis and Reporting Assistant Based on LLM
+
 
 [中文版本](./README_ZH.md)
 
