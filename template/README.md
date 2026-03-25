@@ -19,7 +19,6 @@ This project is an intelligent assistant system designed for data processing and
 - **Base Image:** Basic GPU Environment (aup-learning-cloud)
 - **Extra Dependencies:** Listed in `requirements.txt` <!-- required: briefly describe key packages if any, or write "None" -->
 - **GPU:** AMD Radeon 8060S
-- **Memory:** 64GB shared memory
 
 ## Quick Start <!-- required -->
 
