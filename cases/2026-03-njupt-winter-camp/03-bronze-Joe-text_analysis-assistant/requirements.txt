@@ -1,0 +1,8 @@
+# Core async HTTP client
+aiohttp>=3.9.0
+# Token counting for LLMs
+tiktoken>=0.6.0
+# Jupyter UI widgets
+ipywidgets>=8.1.0
+# Fix asyncio in Jupyter
+nest-asyncio>=1.6.0
