@@ -52,7 +52,7 @@ class AppConfig(BaseModel):
     rate_limit_retry_delay_seconds: int = 1
     chat_provider_concurrency: int = 1
     embedding_provider_concurrency: int = 1
-    allow_local_vector_fallback: bool = False
+    allow_local_vector_fallback: bool = True
     vector_upsert_batch_size: int = 8
     max_input_chars: int = 4000
     enable_sensitive_input_check: bool = True
@@ -165,7 +165,7 @@ class AppConfig(BaseModel):
             rate_limit_retry_delay_seconds=int(_read_setting(settings, "APP_RATE_LIMIT_RETRY_DELAY_SECONDS", 1)),
             chat_provider_concurrency=int(_read_setting(settings, "APP_CHAT_PROVIDER_CONCURRENCY", 1)),
             embedding_provider_concurrency=int(_read_setting(settings, "APP_EMBEDDING_PROVIDER_CONCURRENCY", 1)),
-            allow_local_vector_fallback=_read_bool_setting(settings, "APP_ALLOW_LOCAL_VECTOR_FALLBACK", False),
+            allow_local_vector_fallback=_read_bool_setting(settings, "APP_ALLOW_LOCAL_VECTOR_FALLBACK", True),
             vector_upsert_batch_size=int(_read_setting(settings, "APP_VECTOR_UPSERT_BATCH_SIZE", 8)),
             max_input_chars=int(_read_setting(settings, "APP_MAX_INPUT_CHARS", 4000)),
             enable_sensitive_input_check=_read_bool_setting(settings, "APP_ENABLE_SENSITIVE_INPUT_CHECK", True),

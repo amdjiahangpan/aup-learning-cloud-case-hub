@@ -7,6 +7,15 @@
     "Ambient solar thermal catalysis for polyolefin upcycling using copper encapsulated in silicon nanosheets and chloroaluminate ion.pdf",
     "Advanced Energy Materials - 2024 - Zhao - Solar‐Driven Photoelectrochemical Upcycling of Polyimide Plastic Waste with Safe.pdf"
   ],
+  "document_doc_ids": [
+    "doc_bd14c5a7c6ea",
+    "doc_2232b67551ab",
+    "doc_b733e220f922",
+    "doc_44b409d34803",
+    "doc_15785111f4a9"
+  ],
+  "comparison_report_output": "reports/demo_plastic_upcycling_compare.md",
+  "comparison_report_cache_key": "be7d9233cfa7bfbb6aeb91637b615972d3d6fa89",
   "session_db_source": "/Users/liuhuayaxi/PycharmProjects/JupyterProject/release/demo_workspace_original_paper_dialog_20260320_140715/storage/app_state.db",
   "session_count": 5
 }

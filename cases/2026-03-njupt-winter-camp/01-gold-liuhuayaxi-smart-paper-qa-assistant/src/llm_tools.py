@@ -11,6 +11,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable, Iterable, Literal
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 from uuid import uuid4
 
 from .app_utils import (
@@ -454,21 +456,133 @@ def build_chat_llm(config: "AppConfig", streaming: bool = False):
 def build_embedding_model(config: "AppConfig"):
     """Build the embedding model used by the vector store backend."""
 
-    try:
-        from langchain_openai import OpenAIEmbeddings
-    except ImportError as exc:  # pragma: no cover - depends on environment.
-        raise RuntimeError(
-            "langchain-openai is required. Install requirements.txt before using embeddings."
-        ) from exc
-
-    backend = OpenAIEmbeddings(
-        api_key=config.resolved_embedding_api_key,
-        base_url=config.resolved_embedding_base_url,
-        model=config.embedding_model,
-        chunk_size=max(1, int(getattr(config, "vector_upsert_batch_size", 8))),
-        max_retries=0,
-    )
+    backend = AdaptiveEmbeddingBackend(config)
     return LoggedEmbeddingModel(config=config, backend=backend)
+
+
+class AdaptiveEmbeddingBackend:
+    """Send embedding requests with payloads that work across OpenAI and Ollama-style backends."""
+
+    def __init__(self, config: "AppConfig") -> None:
+        self.config = config
+        self.model = config.embedding_model
+        self.base_url = config.resolved_embedding_base_url.rstrip("/")
+        self.api_key = config.resolved_embedding_api_key
+        self.timeout_seconds = max(1, int(config.embedding_timeout_seconds))
+        self.transport_order = _embedding_transport_candidates(self.base_url, self.model)
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self._embed(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        vectors = self._embed([text])
+        return vectors[0] if vectors else []
+
+    def _embed(self, texts: list[str]) -> list[list[float]]:
+        prepared = [str(text or "").strip() for text in texts]
+        prepared = [text for text in prepared if text]
+        if not prepared:
+            return []
+        last_error: Exception | None = None
+        for index, transport in enumerate(self.transport_order):
+            try:
+                vectors = self._request_embeddings(prepared, transport=transport)
+                if index > 0:
+                    self.transport_order = [transport] + [item for item in self.transport_order if item != transport]
+                return vectors
+            except Exception as exc:
+                last_error = exc
+                if index >= len(self.transport_order) - 1:
+                    break
+                continue
+        if last_error is not None:
+            raise last_error
+        return []
+
+    def _request_embeddings(self, texts: list[str], *, transport: str) -> list[list[float]]:
+        if transport == "ollama_native":
+            url = _ollama_embedding_url(self.base_url)
+            payload = {
+                "model": self.model,
+                "input": texts if len(texts) > 1 else texts[0],
+            }
+        else:
+            url = _openai_embedding_url(self.base_url)
+            payload = {
+                "model": self.model,
+                "input": texts if len(texts) > 1 else texts[0],
+            }
+        response = self._post_json(url, payload)
+        vectors = _extract_embedding_vectors(response, transport=transport)
+        if len(vectors) != len(texts):
+            raise RuntimeError(
+                f"Embedding response count mismatch: expected {len(texts)}, got {len(vectors)}"
+            )
+        return vectors
+
+    def _post_json(self, url: str, payload: dict[str, object]) -> dict[str, object]:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        request = urllib_request.Request(url=url, data=body, headers=headers, method="POST")
+        try:
+            with urllib_request.urlopen(request, timeout=self.timeout_seconds) as response:
+                raw = response.read().decode("utf-8", errors="replace")
+        except urllib_error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Error code: {exc.code} - {detail}") from exc
+        except urllib_error.URLError as exc:
+            raise RuntimeError(f"Embedding request failed: {exc}") from exc
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Embedding response is not valid JSON: {raw[:500]}") from exc
+        if not isinstance(parsed, dict):
+            raise RuntimeError(f"Embedding response is not a JSON object: {parsed!r}")
+        return parsed
+
+
+def _embedding_transport_candidates(base_url: str, model: str) -> list[str]:
+    lowered_base = base_url.lower()
+    lowered_model = model.lower()
+    if "ollama" in lowered_base or ":11434" in lowered_base or "gguf" in lowered_model:
+        return ["ollama_native", "openai_compatible"]
+    return ["openai_compatible"]
+
+
+def _ollama_embedding_url(base_url: str) -> str:
+    normalized = base_url.rstrip("/")
+    if normalized.endswith("/v1"):
+        normalized = normalized[:-3]
+    return f"{normalized}/api/embed"
+
+
+def _openai_embedding_url(base_url: str) -> str:
+    normalized = base_url.rstrip("/")
+    if normalized.endswith("/embeddings"):
+        return normalized
+    return f"{normalized}/embeddings"
+
+
+def _extract_embedding_vectors(payload: dict[str, object], *, transport: str) -> list[list[float]]:
+    if transport == "ollama_native":
+        embeddings = payload.get("embeddings")
+        if isinstance(embeddings, list) and embeddings and all(isinstance(item, list) for item in embeddings):
+            return [[float(value) for value in item] for item in embeddings]
+        single = payload.get("embedding")
+        if isinstance(single, list):
+            return [[float(value) for value in single]]
+        raise RuntimeError(f"Ollama embedding response missing embeddings: {payload}")
+    data = payload.get("data")
+    if isinstance(data, list):
+        vectors: list[list[float]] = []
+        for item in data:
+            if not isinstance(item, dict) or not isinstance(item.get("embedding"), list):
+                raise RuntimeError(f"OpenAI-compatible embedding response is malformed: {payload}")
+            vectors.append([float(value) for value in item["embedding"]])
+        return vectors
+    raise RuntimeError(f"OpenAI-compatible embedding response missing data: {payload}")
 
 
 async def _acquire_chat_slot(

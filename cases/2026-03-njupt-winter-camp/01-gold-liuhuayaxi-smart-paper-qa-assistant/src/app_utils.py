@@ -253,6 +253,95 @@ def build_file_signature(path: str | Path) -> str:
     ).hexdigest()
 
 
+def source_type_folder_name(source_type: str) -> str:
+    normalized = str(source_type or "").strip()
+    return {
+        "lecture": "lectures",
+        "assignment": "assignments",
+        "paper": "papers",
+    }.get(normalized, f"{normalized}s" if normalized else "")
+
+
+def resolve_document_file_path(
+    *,
+    file_path: str | Path,
+    course_id: str = "",
+    source_type: str = "",
+    file_name: str = "",
+    data_root: str | Path | None = None,
+) -> Path:
+    raw_input = str(file_path or "").strip()
+    fallback_name = str(file_name or "").strip()
+    current_root = (
+        Path(data_root).resolve(strict=False)
+        if data_root is not None
+        else (Path(__file__).resolve().parent.parent / "data/raw").resolve(strict=False)
+    )
+    original = Path(raw_input).expanduser() if raw_input else (Path(fallback_name) if fallback_name else None)
+    resolved_original = original.resolve(strict=False) if original is not None else None
+    if raw_input and resolved_original is not None and resolved_original.exists():
+        return resolved_original
+
+    normalized_course_id = str(course_id or "").strip()
+    normalized_source_type = str(source_type or "").strip()
+    normalized_file_name = fallback_name or (original.name if original is not None else "")
+    if current_root and normalized_course_id and normalized_file_name:
+        folder_candidates = []
+        preferred_folder = source_type_folder_name(normalized_source_type)
+        if preferred_folder:
+            folder_candidates.append(preferred_folder)
+        folder_candidates.extend(
+            folder
+            for folder in ("lectures", "assignments", "papers")
+            if folder not in folder_candidates
+        )
+        for folder_name in folder_candidates:
+            candidate = (current_root / normalized_course_id / folder_name / normalized_file_name).resolve(strict=False)
+            if candidate.exists():
+                return candidate
+
+    if resolved_original is not None:
+        parts = resolved_original.parts
+        marker_variants = (("data", "raw"), ("raw",))
+        for marker in marker_variants:
+            marker_len = len(marker)
+            for index in range(len(parts) - marker_len + 1):
+                if tuple(parts[index : index + marker_len]) != marker:
+                    continue
+                relative_parts = parts[index + marker_len :]
+                if not relative_parts:
+                    continue
+                candidate = (current_root / Path(*relative_parts)).resolve(strict=False)
+                if candidate.exists():
+                    return candidate
+
+    if resolved_original is not None:
+        return resolved_original
+    if fallback_name:
+        return Path(fallback_name)
+    return Path(raw_input)
+
+
+def normalize_document_metadata_file_path(
+    metadata: dict[str, Any],
+    *,
+    data_root: str | Path | None = None,
+    refresh_signature: bool = False,
+) -> dict[str, Any]:
+    updated = dict(metadata)
+    canonical_path = resolve_document_file_path(
+        file_path=str(updated.get("file_path", "")),
+        course_id=str(updated.get("course_id", "")),
+        source_type=str(updated.get("source_type", "")),
+        file_name=str(updated.get("file_name", "")),
+        data_root=data_root,
+    )
+    updated["file_path"] = str(canonical_path)
+    if refresh_signature and canonical_path.exists():
+        updated["file_signature"] = build_file_signature(canonical_path)
+    return updated
+
+
 def build_course_signature(course_id: str, root_dir: str | Path | None = None) -> str:
     if root_dir is None:
         root_dir = Path(__file__).resolve().parent.parent / "data/raw"

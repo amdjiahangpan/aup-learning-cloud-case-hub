@@ -16,6 +16,7 @@ from .app_utils import (
     build_file_signature,
     detect_language,
     load_json_mapping,
+    normalize_document_metadata_file_path,
     save_json_mapping,
 )
 
@@ -60,15 +61,17 @@ class KnowledgeBaseManager:
 
         await self._repair_course_vectors(course_id)
         records = await self.vector_store.list_documents(course_id)
-        return [_normalize_record_file_path(record, self.config) for record in records]
+        return _dedupe_document_records([_normalize_record_file_path(record, self.config) for record in records])
 
     async def list_manageable_files(self, course_id: str) -> list[DocumentRecord]:
         """List both vectorized and not-yet-vectorized files under one knowledge base."""
 
         await self._repair_course_vectors(course_id)
-        vectorized_records = await self.vector_store.list_documents(course_id)
+        vectorized_records = _dedupe_document_records(
+            [_normalize_record_file_path(record, self.config) for record in await self.vector_store.list_documents(course_id)]
+        )
         by_path = {
-            str(Path(_normalize_record_file_path(record, self.config).file_path).resolve(strict=False)): _normalize_record_file_path(record, self.config)
+            str(Path(record.file_path).resolve(strict=False)): record
             for record in vectorized_records
         }
         records: list[DocumentRecord] = []
@@ -716,12 +719,29 @@ def _translate_source_type(value: str) -> str:
 
 
 def _normalize_record_file_path(record: DocumentRecord, config: AppConfig) -> DocumentRecord:
-    legacy_root = (config.project_root / "notebooks" / "data" / "raw").resolve(strict=False)
-    current_root = config.data_root.resolve(strict=False)
-    original_path = Path(record.file_path).resolve(strict=False)
-    try:
-        relative = original_path.relative_to(legacy_root)
-    except ValueError:
+    normalized = normalize_document_metadata_file_path(record.model_dump(), data_root=config.data_root)
+    if str(normalized.get("file_path", "")) == str(record.file_path):
         return record
-    canonical_path = current_root / relative
-    return record.model_copy(update={"file_path": str(canonical_path.resolve(strict=False))})
+    return record.model_copy(update={"file_path": str(normalized.get("file_path", ""))})
+
+
+def _record_identity_key(record: DocumentRecord) -> str:
+    normalized_path = str(Path(record.file_path).resolve(strict=False))
+    return "|".join(
+        [
+            record.course_id,
+            record.source_type,
+            normalized_path or record.file_name,
+            record.file_name,
+        ]
+    )
+
+
+def _dedupe_document_records(records: list[DocumentRecord]) -> list[DocumentRecord]:
+    best_by_key: dict[str, DocumentRecord] = {}
+    for record in records:
+        key = _record_identity_key(record)
+        existing = best_by_key.get(key)
+        if existing is None or (int(record.chunk_count or 0), record.doc_id) > (int(existing.chunk_count or 0), existing.doc_id):
+            best_by_key[key] = record
+    return sorted(best_by_key.values(), key=lambda item: (item.source_type, item.file_name.lower()))

@@ -59,9 +59,13 @@ def build_app(config: AppConfig):
     single_doc_service = SingleDocumentAnalysisService(config, vector_store)
     batch_service = BatchComparisonService(config, vector_store, single_doc_service)
     field_templates = load_json_mapping(config.field_template_path)
+    demo_manifest = load_json_mapping(config.project_root / "storage" / "demo_manifest.json")
+    demo_course_id = str(demo_manifest.get("knowledge_base", "")).strip()
+    demo_compare_file_names = [str(item).strip() for item in demo_manifest.get("documents", []) if str(item).strip()]
     manage_task_state = {"task": None, "control": None, "label": ""}
     chat_task_state = {"task": None, "control": None, "label": ""}
     analysis_task_state = {"task": None, "control": None, "label": ""}
+    compare_report_view_state = {"signature": "", "auto_loaded": False}
 
     manage_kb_dropdown = widgets.Dropdown(
         options=[("请选择知识库", "")],
@@ -854,6 +858,100 @@ def build_app(config: AppConfig):
     def reset_report_table_view(message: str = "<i>这里会显示结构化表格结果，方便你快速核对与筛选。</i>") -> None:
         report_table_output.value = message
 
+    def _compare_selection_signature(
+        course_id: str,
+        doc_ids: list[str],
+        *,
+        target_fields,
+        output_language: str,
+        export_csv: bool,
+    ) -> str:
+        return sanitize_storage_key(
+            "|".join(
+                [
+                    course_id.strip(),
+                    output_language.strip(),
+                    "csv" if export_csv else "no_csv",
+                    ",".join(sorted(str(doc_id).strip() for doc_id in doc_ids if str(doc_id).strip())),
+                    ";".join(
+                        f"{spec.name}|{spec.instruction}|{spec.expected_unit}"
+                        for spec in target_fields
+                        if str(spec.name).strip()
+                    ),
+                ]
+            )
+        )
+
+    def _default_demo_analysis_selection(course_id: str, records: list[DocumentRecord]) -> tuple[str, ...]:
+        if course_id.strip() != demo_course_id or not demo_compare_file_names:
+            return ()
+        by_name = {record.file_name: record.doc_id for record in records}
+        selected = tuple(by_name[name] for name in demo_compare_file_names if name in by_name)
+        return selected if len(selected) >= 2 else ()
+
+    async def maybe_restore_cached_compare_report(
+        *,
+        course_id: str | None = None,
+        selected_doc_ids: list[str] | None = None,
+        force: bool = False,
+    ) -> None:
+        resolved_course_id = str(course_id if course_id is not None else analysis_kb_dropdown.value).strip()
+        resolved_doc_ids = [
+            str(item).strip()
+            for item in (selected_doc_ids if selected_doc_ids is not None else list(doc_selector.value))
+            if str(item).strip()
+        ]
+        field_specs = collect_target_field_specs()
+        signature = _compare_selection_signature(
+            resolved_course_id,
+            resolved_doc_ids,
+            target_fields=field_specs,
+            output_language=language_toggle.value,
+            export_csv=export_csv_checkbox.value,
+        )
+        if not resolved_course_id or len(resolved_doc_ids) < 2:
+            if compare_report_view_state["auto_loaded"]:
+                clear_report_markdown_view()
+                reset_report_table_view()
+                reset_report_progress_view()
+                compare_report_view_state["signature"] = ""
+                compare_report_view_state["auto_loaded"] = False
+            return
+        report = await batch_service.load_cached_report(
+            course_id=resolved_course_id,
+            doc_ids=resolved_doc_ids,
+            output_language=language_toggle.value,
+            target_fields=field_specs or None,
+            export_csv=export_csv_checkbox.value,
+        )
+        if report is None:
+            if compare_report_view_state["auto_loaded"] and compare_report_view_state["signature"] != signature:
+                clear_report_markdown_view()
+                reset_report_table_view("<i>当前选择还没有预生成的批量对比结果。需要时可以点击“批量对比”。</i>")
+                reset_report_progress_view("<i>当前还没有运行中的分析任务。</i>")
+                compare_report_view_state["signature"] = ""
+                compare_report_view_state["auto_loaded"] = False
+            return
+        if compare_report_view_state["auto_loaded"] and compare_report_view_state["signature"] == signature and not force:
+            return
+        render_report_markdown(report.markdown)
+        report_table_output.value = _render_report_table(
+            report.table_headers,
+            report.table_rows,
+            title="对比表格视图",
+        )
+        report_progress_output.value = _render_analysis_progress_panel(
+            title="已加载预生成对比报告",
+            summary=f"已直接展示 {len(resolved_doc_ids)} 篇文档的缓存对比结果。",
+            detail="如果你更换文档或字段后没有命中缓存，再点击“批量对比”即可重新生成。",
+        )
+        clear_report_log()
+        write_report_log(f"已自动加载缓存对比报告: {report.output_path}")
+        if report.csv_output_path:
+            write_report_log(f"CSV 已保存到: {report.csv_output_path}")
+        compare_report_view_state["signature"] = signature
+        compare_report_view_state["auto_loaded"] = True
+
     def _render_analysis_progress_panel(*, title: str, summary: str, detail: str = "") -> str:
         body = [f"<b>{_escape_html(title)}</b>", f"<div style='margin-top:6px;'>{_escape_html(summary)}</div>"]
         if detail:
@@ -927,6 +1025,7 @@ def build_app(config: AppConfig):
         if not specs:
             target_fields_summary_html.value = "<i>当前未配置目标字段。你可以点击“添加字段”逐项填写，或直接插入模板。</i>"
             _schedule(refresh_analysis_checkpoint_status())
+            _schedule(maybe_restore_cached_compare_report())
             return
         chips = []
         for spec in specs:
@@ -938,6 +1037,7 @@ def build_app(config: AppConfig):
             )
         target_fields_summary_html.value = "<b>当前字段：</b><br>" + "".join(chips)
         _schedule(refresh_analysis_checkpoint_status())
+        _schedule(maybe_restore_cached_compare_report())
 
     async def refresh_analysis_checkpoint_status() -> None:
         course_id = analysis_kb_dropdown.value.strip()
@@ -1481,6 +1581,8 @@ def build_app(config: AppConfig):
             doc_selector.value = ()
             analysis_doc_records.clear()
             analysis_doc_records_by_id.clear()
+            compare_report_view_state["signature"] = ""
+            compare_report_view_state["auto_loaded"] = False
             analysis_doc_list_box.children = (
                 widgets.HTML("<div style='padding:12px;color:#6b7280;'>请选择知识库后查看分析文件列表。</div>"),
             )
@@ -1500,6 +1602,8 @@ def build_app(config: AppConfig):
         options = [(_format_doc_option(record), record.doc_id) for record in records]
         valid_ids = {value for _, value in options}
         selected_ids = tuple(doc_id for doc_id in doc_selector.value if doc_id in valid_ids)
+        if not selected_ids:
+            selected_ids = _default_demo_analysis_selection(course_id, records)
         doc_selector.options = options
         doc_selector.value = selected_ids
         reset_analysis_doc_page()
@@ -1522,6 +1626,11 @@ def build_app(config: AppConfig):
         else:
             analysis_doc_detail_html.value = _manage_details_placeholder_html(empty_hint or "该知识库下暂无文件。")
         await refresh_analysis_checkpoint_status()
+        await maybe_restore_cached_compare_report(
+            course_id=course_id,
+            selected_doc_ids=list(selected_ids),
+            force=True,
+        )
 
     def _select_visible_analysis_docs(_=None) -> None:
         doc_selector.value = tuple(record.doc_id for record in _filtered_analysis_records())
@@ -2691,6 +2800,8 @@ def build_app(config: AppConfig):
 
     async def run_single_analysis(_):
         single_button.disabled = True
+        compare_report_view_state["signature"] = ""
+        compare_report_view_state["auto_loaded"] = False
         report_progress_output.value = _render_analysis_progress_panel(
             title="单文档分析",
             summary="正在准备分析任务。",
@@ -2773,6 +2884,8 @@ def build_app(config: AppConfig):
     async def _run_compare(*, resume_mode: bool):
         compare_button.disabled = True
         resume_compare_button.disabled = True
+        compare_report_view_state["signature"] = ""
+        compare_report_view_state["auto_loaded"] = False
         report_progress_output.value = _render_analysis_progress_panel(
             title="批量对比",
             summary="正在准备对比任务。",
@@ -3056,6 +3169,7 @@ def build_app(config: AppConfig):
         if change.get("name") == "value":
             render_analysis_doc_selector()
             _schedule(refresh_analysis_checkpoint_status())
+            _schedule(maybe_restore_cached_compare_report())
 
     def on_analysis_doc_search_change(change):
         if change.get("name") == "value":

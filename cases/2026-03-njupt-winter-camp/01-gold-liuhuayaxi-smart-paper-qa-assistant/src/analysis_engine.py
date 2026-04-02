@@ -76,6 +76,29 @@ def save_report(report: ComparisonReport, output_dir: str | Path | None = None) 
     return report.model_copy(update={"output_path": str(output_path.resolve())})
 
 
+def normalize_cached_report_paths(report: ComparisonReport, reports_dir: str | Path) -> ComparisonReport:
+    output_path = _rebase_generated_path(report.output_path, reports_dir) or report.output_path
+    csv_output_path = (
+        _rebase_generated_path(report.csv_output_path, reports_dir)
+        if report.csv_output_path
+        else report.csv_output_path
+    )
+    return report.model_copy(update={"output_path": output_path, "csv_output_path": csv_output_path})
+
+
+def _rebase_generated_path(raw_path: str | None, reports_dir: str | Path) -> str | None:
+    normalized = str(raw_path or "").strip()
+    if not normalized:
+        return raw_path
+    candidate = Path(normalized)
+    if candidate.exists():
+        return str(candidate.resolve())
+    fallback = Path(reports_dir) / candidate.name
+    if fallback.exists():
+        return str(fallback.resolve())
+    return normalized
+
+
 def extract_json_object(raw_text: str) -> dict[str, Any]:
     """Parse the first JSON object found inside a model response."""
 
@@ -829,6 +852,62 @@ class BatchComparisonService:
         self.checkpoint_dir = config.analysis_checkpoint_dir
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
+    def _report_cache_namespace(self, course_id: str) -> str:
+        return f"report_{course_id}"
+
+    def _build_report_cache_key(
+        self,
+        *,
+        course_id: str,
+        doc_ids: list[str],
+        output_language: Literal["auto", "zh", "en"],
+        target_fields: list[ExtractionFieldSpec],
+        export_csv: bool,
+    ) -> str:
+        return build_cache_key(
+            output_language,
+            doc_ids,
+            build_course_signature(course_id, root_dir=self.config.data_root),
+            [(spec.name, spec.instruction, spec.expected_unit) for spec in target_fields],
+            export_csv,
+            self.config.compare_report_prompt_zh if output_language != "en" else self.config.compare_report_prompt_en,
+            self.config.table_summary_prompt_zh if output_language != "en" else self.config.table_summary_prompt_en,
+        )
+
+    async def load_cached_report(
+        self,
+        *,
+        course_id: str,
+        doc_ids: list[str],
+        output_language: Literal["auto", "zh", "en"] = "auto",
+        target_fields: list[ExtractionFieldSpec] | None = None,
+        export_csv: bool = True,
+    ) -> ComparisonReport | None:
+        normalized_doc_ids = list(dict.fromkeys(doc_ids))
+        normalized_target_fields = [spec for spec in (target_fields or []) if spec.name.strip()]
+        if not normalized_doc_ids or not self.config.enable_result_cache:
+            return None
+        cache_namespace = self._report_cache_namespace(course_id)
+        cache_key = self._build_report_cache_key(
+            course_id=course_id,
+            doc_ids=normalized_doc_ids,
+            output_language=output_language,
+            target_fields=normalized_target_fields,
+            export_csv=export_csv,
+        )
+        cached = self.result_cache.get(cache_namespace, cache_key)
+        if not isinstance(cached, dict) or not cached:
+            return None
+        cached_report = normalize_cached_report_paths(
+            ComparisonReport.model_validate(cached),
+            self.config.reports_dir,
+        )
+        report_exists = bool(cached_report.output_path) and Path(cached_report.output_path).exists()
+        csv_exists = not cached_report.csv_output_path or Path(cached_report.csv_output_path).exists()
+        if not report_exists or not csv_exists:
+            return None
+        return cached_report
+
     async def compare_documents(
         self,
         course_id: str,
@@ -860,20 +939,21 @@ class BatchComparisonService:
             checkpoint = {}
         document_records = await self.vector_store.list_documents(course_id)
         doc_title_map = {record.doc_id: record.file_name for record in document_records}
-        cache_namespace = f"report_{course_id}"
-        cache_key = build_cache_key(
-            output_language,
-            doc_ids,
-            build_course_signature(course_id, root_dir=self.config.data_root),
-            [(spec.name, spec.instruction, spec.expected_unit) for spec in normalized_target_fields],
-            export_csv,
-            self.config.compare_report_prompt_zh if output_language != "en" else self.config.compare_report_prompt_en,
-            self.config.table_summary_prompt_zh if output_language != "en" else self.config.table_summary_prompt_en,
+        cache_namespace = self._report_cache_namespace(course_id)
+        cache_key = self._build_report_cache_key(
+            course_id=course_id,
+            doc_ids=doc_ids,
+            output_language=output_language,
+            target_fields=normalized_target_fields,
+            export_csv=export_csv,
         )
         if self.config.enable_result_cache:
             cached = self.result_cache.get(cache_namespace, cache_key)
             if isinstance(cached, dict) and cached:
-                cached_report = ComparisonReport.model_validate(cached)
+                cached_report = normalize_cached_report_paths(
+                    ComparisonReport.model_validate(cached),
+                    self.config.reports_dir,
+                )
                 report_exists = bool(cached_report.output_path) and Path(cached_report.output_path).exists()
                 csv_exists = not cached_report.csv_output_path or Path(cached_report.csv_output_path).exists()
                 if report_exists and csv_exists:
